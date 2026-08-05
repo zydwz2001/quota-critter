@@ -4,7 +4,11 @@
 
 Quota Critter 是一个常驻系统托盘、可悬浮在桌面上的 Codex 额度提示工具。它通过官方 Codex App Server 获取账户额度，让用户无论在 Codex 桌面端还是 VS Code Codex 扩展中工作，都能随时看到剩余额度和重置时间。
 
-当前项目处于开发阶段，视觉概念图和规划文档已保留在仓库中。
+当前项目为 v0.1 预览版，视觉概念图和规划文档已保留在仓库中。
+
+## 安装下载
+
+macOS DMG 和 Windows x64 NSIS 安装包都在 [v0.1.0 Release](https://github.com/zydwz2001/quota-critter/releases/tag/v0.1.0)。首次运行前请先安装并登录 Codex CLI。
 
 ## 已确定的产品方向
 
