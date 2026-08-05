@@ -8,7 +8,7 @@ Quota Critter 是一个常驻系统托盘、可悬浮在桌面上的 Codex 额�
 
 ## 安装下载
 
-macOS DMG 和 Windows x64 NSIS 安装包都在 [v0.1.0 Release](https://github.com/zydwz2001/quota-critter/releases/tag/v0.1.0)。首次运行前请先安装并登录 Codex CLI。
+macOS DMG 和 Windows x64 NSIS 安装包都在 [v0.1.1 Release](https://github.com/zydwz2001/quota-critter/releases/tag/v0.1.1)。首次运行前请先安装并登录 Codex CLI。
 
 ## 已确定的产品方向
 
@@ -68,7 +68,7 @@ npm run tauri build
 ## 当前实现
 
 - Lumo 紫蓝像素星灵、轨道额度指示、主额度与重置倒计时
-- Lumo 素材来自概念方向的像素星灵：`src/assets/lumo-sprite.png`
+- Lumo 素材来自概念方向的星灵，并使用平滑边缘版本：`src/assets/lumo-sprite-smooth.png`
 - 优先展示 App Server 的真实 `individualLimit`，避免把模型时间窗误读成账户剩余额度
 - 收起态只显示 Lumo 与弧形轨道亮点；点击 Lumo 后才展开百分比、进度条和重置时间
 - 自动轮询更新额度；手动刷新位于系统托盘菜单，不占用主视觉

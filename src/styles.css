@@ -18,8 +18,9 @@
 }
 
 * { box-sizing: border-box; }
-html, body, #app { width: 100%; min-width: 250px; min-height: 100%; margin: 0; }
-body { overflow: hidden; background: transparent; }
+html, body, #app { width: 100%; min-width: 250px; min-height: 100%; margin: 0; background: rgba(0, 0, 0, 0) !important; }
+html, body { color-scheme: dark; }
+body { overflow: hidden; }
 button, input, select { font: inherit; }
 button { color: inherit; }
 
@@ -31,7 +32,7 @@ button { color: inherit; }
 .lumo-trigger { position: absolute; z-index: 4; top: 5px; left: 1px; display: block; width: 150px; height: 142px; padding: 0; border: 0; border-radius: 50%; background: transparent; cursor: pointer; filter: drop-shadow(0 10px 15px rgba(5, 5, 25, .42)); transition: transform .24s ease, filter .24s ease; }
 .lumo-trigger:hover { transform: translateY(-2px) rotate(-1deg); filter: drop-shadow(0 12px 18px rgba(8, 8, 38, .55)); }
 .lumo-trigger:focus-visible { outline: 2px solid var(--mint); outline-offset: 4px; }
-.lumo { width: 150px; height: 142px; object-fit: contain; image-rendering: pixelated; filter: saturate(.77) brightness(1.08); }
+.lumo { width: 150px; height: 142px; object-fit: contain; image-rendering: auto; filter: saturate(.82) brightness(1.02); transform: translateZ(0); backface-visibility: hidden; }
 .lumo--low { filter: saturate(.66) brightness(1.06) hue-rotate(-8deg); }
 .lumo--exhausted, .lumo--stale { filter: saturate(.18) brightness(.9); }
 

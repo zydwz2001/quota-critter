@@ -1,5 +1,5 @@
 import "./styles.css";
-import lumoSprite from "./assets/lumo-sprite.png";
+import lumoSprite from "./assets/lumo-sprite-smooth.png";
 import { bridge } from "./bridge";
 import {
   defaultSettings,
@@ -108,8 +108,19 @@ function quotaPanel(window: QuotaWindow | undefined, snapshot: QuotaSnapshot | n
   return `<div class="quota-panel quota-panel--${status}">
     <div class="quota-panel__top"><strong>${safe(window.remainingPercent)}<small>% left</small></strong><span>${safe(usage)}</span></div>
     <div class="quota-panel__track"><span style="width:${window.remainingPercent}%"></span></div>
-    <div class="quota-panel__bottom"><span>Resets ${safe(formatCountdown(window.resetsAt))}</span><span>${safe(formatReset(window.resetsAt))}</span></div>
+    <div class="quota-panel__bottom"><span data-reset-countdown data-reset-at="${safe(window.resetsAt)}">Resets ${safe(formatCountdown(window.resetsAt))}</span><span>${safe(formatReset(window.resetsAt))}</span></div>
   </div>`;
+}
+
+function updateLiveText(): void {
+  const countdown = root.querySelector<HTMLElement>("[data-reset-countdown]");
+  if (countdown) {
+    countdown.textContent = `Resets ${formatCountdown(Number(countdown.dataset.resetAt))}`;
+  }
+  const synced = root.querySelector<HTMLElement>("[data-synced-at]");
+  if (synced) {
+    synced.textContent = `Updated ${formatSynced(Number(synced.dataset.syncedAt))}`;
+  }
 }
 
 function settingsMarkup(): string {
@@ -119,7 +130,7 @@ function settingsMarkup(): string {
     <label class="setting-row"><span><strong>Lock position</strong><small>Disable accidental dragging</small></span><input type="checkbox" data-setting="locked" ${state.settings.locked ? "checked" : ""}></label>
     <label class="setting-row"><span><strong>Launch at login</strong><small>Start with your desktop</small></span><input type="checkbox" data-setting="launchAtLogin" ${state.settings.launchAtLogin ? "checked" : ""}></label>
     <label class="setting-row"><span><strong>Motion</strong><small>Respect system reduced motion</small></span><select data-setting="reducedMotion"><option value="system" ${motion === "system" ? "selected" : ""}>System</option><option value="on" ${motion === "on" ? "selected" : ""}>On</option><option value="off" ${motion === "off" ? "selected" : ""}>Off</option></select></label>
-  </div><div class="panel-footer"><span>Quota Critter 0.1.0</span><button class="text-button" data-action="toggle-settings">← Back</button></div>`;
+  </div><div class="panel-footer"><span>Quota Critter 0.1.1</span><button class="text-button" data-action="toggle-settings">← Back</button></div>`;
 }
 
 function render(): void {
@@ -130,7 +141,7 @@ function render(): void {
   const motionClass = state.settings.reducedMotion === "on" ? " reduce-motion" : "";
   const expandedPanel = state.settingsOpen
     ? `<div class="expanded-panel expanded-panel--settings"><div class="panel-heading"><span>SETTINGS</span><button class="icon-button" data-action="toggle-settings" aria-label="Close settings">×</button></div>${settingsMarkup()}</div>`
-    : `<div class="expanded-panel"><div class="panel-heading"><span>ACCOUNT QUOTA</span><button class="icon-button" data-action="toggle-details" aria-label="Collapse quota">×</button></div>${quotaPanel(mainWindow, snapshot)}<div class="panel-meta"><span>${snapshot?.stale ? "Showing last known quota" : "Updates automatically"}</span>${snapshot ? ` <span>Updated ${safe(formatSynced(snapshot.fetchedAt))}</span>` : ""}</div></div>`;
+    : `<div class="expanded-panel"><div class="panel-heading"><span>ACCOUNT QUOTA</span><button class="icon-button" data-action="toggle-details" aria-label="Collapse quota">×</button></div>${quotaPanel(mainWindow, snapshot)}<div class="panel-meta"><span>${snapshot?.stale ? "Showing last known quota" : "Updates automatically"}</span>${snapshot ? ` <span data-synced-at="${safe(snapshot.fetchedAt)}">Updated ${safe(formatSynced(snapshot.fetchedAt))}</span>` : ""}</div></div>`;
 
   root.innerHTML = `<main class="widget-shell${motionClass}" data-status="${status}">
     <section class="floating-widget${staleClass}" aria-label="Quota Critter">
@@ -143,6 +154,7 @@ function render(): void {
     </section>
     ${state.preview ? `<div class="preview-badge">browser preview · click Lumo</div>` : ""}
   </main>`;
+  updateLiveText();
 
   if (bridge.isTauri()) {
     const nextHeight = state.expanded ? (state.settingsOpen ? 380 : 292) : 152;
@@ -241,7 +253,7 @@ function wireEvents(): void {
 
 async function start(): Promise<void> {
   wireEvents();
-  window.setInterval(() => render(), 1000);
+  window.setInterval(updateLiveText, 1000);
   if (!bridge.isTauri()) {
     state.preview = true;
     state.server = "ready";

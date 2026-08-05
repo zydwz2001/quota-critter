@@ -85,7 +85,7 @@ stdio 是一行一个 JSON 消息，wire 上省略 `jsonrpc` 字段。Rust 必�
 连接建立后先发送：
 
 ```json
-{"method":"initialize","id":0,"params":{"clientInfo":{"name":"quota_critter","title":"Quota Critter","version":"0.1.0"}}}
+{"method":"initialize","id":0,"params":{"clientInfo":{"name":"quota_critter","title":"Quota Critter","version":"0.1.1"}}}
 ```
 
 成功响应后发送：
