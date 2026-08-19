@@ -143,13 +143,16 @@ impl Drop for RpcClient {
     }
 }
 
-fn resolve_codex_path(override_path: Option<&str>) -> Result<PathBuf, String> {
-    if let Some(path) = override_path.map(str::trim).filter(|s| !s.is_empty()) {
-        let path = PathBuf::from(path);
-        if path.is_file() {
-            return Ok(path);
+fn resolve_codex_path(override_path: Option<&Path>) -> Result<PathBuf, String> {
+    if let Some(path) = override_path {
+        let trimmed = path.to_string_lossy().trim().to_string();
+        if !trimmed.is_empty() {
+            let candidate = PathBuf::from(&trimmed);
+            if candidate.is_file() {
+                return Ok(candidate);
+            }
+            return Err("CODEX_NOT_FOUND".to_string());
         }
-        return Err("CODEX_NOT_FOUND".to_string());
     }
     if let Ok(path) = env::var("QUOTA_CRITTER_CODEX_PATH") {
         let path = PathBuf::from(path);
