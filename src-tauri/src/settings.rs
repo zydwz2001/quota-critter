@@ -13,6 +13,8 @@ pub struct AppSettings {
     pub refresh_seconds_visible: u64,
     pub refresh_seconds_hidden: u64,
     pub locale: String,
+    #[serde(default)]
+    pub codex_override: Option<String>,
     pub window_placement: Option<WindowPlacement>,
 }
 
@@ -36,6 +38,7 @@ impl Default for AppSettings {
             refresh_seconds_visible: 60,
             refresh_seconds_hidden: 300,
             locale: "system".into(),
+            codex_override: None,
             window_placement: None,
         }
     }

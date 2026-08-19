@@ -65,6 +65,7 @@ button { color: inherit; }
 .error-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: var(--coral); }
 .error-action { margin-left: auto; padding: 4px 7px; border: 0; border-radius: 6px; color: #ffe2df; background: transparent; cursor: pointer; font-size: 10px; }
 .error-action:hover { background: rgba(255, 154, 145, .12); }
+.error-action--ghost { margin-left: 4px; color: rgba(255, 226, 223, .65); font-size: 9px; }
 
 .settings-list { display: grid; gap: 7px; padding-top: 7px; }
 .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px; border-radius: 9px; background: rgba(52, 53, 95, .45); cursor: pointer; }
@@ -73,6 +74,10 @@ button { color: inherit; }
 .setting-row small { color: var(--muted); font-size: 8px; }
 .setting-row input { accent-color: var(--mint); }
 .setting-row select { padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; color: var(--text); background: var(--panel); font-size: 9px; }
+.setting-row--text { align-items: stretch; flex-direction: column; gap: 6px; cursor: default; }
+.setting-row--text > span { width: 100%; }
+.setting-row--text input[type="text"] { width: 100%; padding: 5px 7px; border: 1px solid var(--border); border-radius: 6px; color: var(--text); background: var(--panel); font-size: 10px; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+.setting-row--text input[type="text"]:focus { outline: none; border-color: var(--mint); }
 .panel-footer { gap: 12px; padding-top: 9px; color: var(--dim); font-size: 9px; }
 .text-button { padding: 4px 7px; border: 0; border-radius: 6px; color: var(--mint); background: transparent; cursor: pointer; font-size: 10px; }
 .text-button:hover { background: rgba(139, 227, 205, .12); }

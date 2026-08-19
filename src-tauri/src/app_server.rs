@@ -34,8 +34,8 @@ pub struct RpcClient {
 }
 
 impl RpcClient {
-    pub fn spawn(app: AppHandle) -> Result<Self, String> {
-        let path = resolve_codex_path()?;
+    pub fn spawn(app: AppHandle, codex_override: Option<PathBuf>) -> Result<Self, String> {
+        let path = resolve_codex_path(codex_override.as_deref())?;
         let mut child = Command::new(path)
             .args(["app-server", "--listen", "stdio://"])
             .stdin(Stdio::piped())
@@ -143,7 +143,14 @@ impl Drop for RpcClient {
     }
 }
 
-fn resolve_codex_path() -> Result<PathBuf, String> {
+fn resolve_codex_path(override_path: Option<&str>) -> Result<PathBuf, String> {
+    if let Some(path) = override_path.map(str::trim).filter(|s| !s.is_empty()) {
+        let path = PathBuf::from(path);
+        if path.is_file() {
+            return Ok(path);
+        }
+        return Err("CODEX_NOT_FOUND".to_string());
+    }
     if let Ok(path) = env::var("QUOTA_CRITTER_CODEX_PATH") {
         let path = PathBuf::from(path);
         if path.is_file() {

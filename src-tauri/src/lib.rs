@@ -70,7 +70,12 @@ impl Core {
         let core = Arc::clone(self);
         thread::spawn(move || {
             core.emit_server(AppServerState::Starting);
-            match RpcClient::spawn(core.app.clone()) {
+            let override_path = core
+                .settings
+                .get()
+                .ok()
+                .and_then(|s| s.codex_override);
+            match RpcClient::spawn(core.app.clone(), override_path.map(PathBuf::from)) {
                 Ok(client) => {
                     core.emit_server(AppServerState::Handshaking);
                     if let Err(error) = client.initialize() {
@@ -305,6 +310,11 @@ fn set_always_on_top(app: AppHandle, value: bool) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn open_external_url(url: String) -> Result<(), String> {
+    open_url(&url)
+}
+
+#[tauri::command]
 fn set_widget_height(app: AppHandle, height: f64) -> Result<(), String> {
     let height = height.clamp(100.0, 500.0);
     app.get_webview_window("main")
@@ -458,7 +468,8 @@ pub fn run() {
             get_settings,
             set_settings,
             set_always_on_top,
-            set_widget_height
+            set_widget_height,
+            open_external_url
         ])
         .run(tauri::generate_context!())
         .expect("error while running Quota Critter");

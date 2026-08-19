@@ -58,4 +58,5 @@ export const bridge = {
     const tauri = await loadTauri();
     await tauri.getCurrentWindow().startDragging();
   },
+  openUrl: (url: string) => invoke<void>("open_external_url", { url }),
 };

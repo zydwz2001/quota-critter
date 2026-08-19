@@ -86,11 +86,14 @@ function widgetState(snapshot: QuotaSnapshot | null): ReturnType<typeof quotaSta
 
 function errorMarkup(error: UserFacingError | null): string {
   if (!error) return "";
-  const action = error.action === "login"
-    ? `<button class="error-action" data-action="login">Sign in</button>`
-    : error.action === "retry"
-      ? `<button class="error-action" data-action="retry">Retry</button>`
-      : "";
+  let action = "";
+  if (error.action === "login") {
+    action = `<button class="error-action" data-action="login">Sign in</button>`;
+  } else if (error.action === "retry") {
+    action = `<button class="error-action" data-action="retry">Retry</button>`;
+  } else if (error.action === "install") {
+    action = `<button class="error-action" data-action="install">Install Codex</button><button class="error-action error-action--ghost" data-action="open-settings">Set path…</button>`;
+  }
   return `<div class="error-banner" role="alert"><span class="error-dot"></span><span>${safe(error.message)}</span>${action}</div>`;
 }
 
@@ -124,12 +127,14 @@ function updateLiveText(): void {
 
 function settingsMarkup(): string {
   const motion = state.settings.reducedMotion;
+  const codexPath = state.settings.codexOverride ?? "";
   return `<div class="settings-list">
     <label class="setting-row"><span><strong>Always on top</strong><small>Keep Lumo above other windows</small></span><input type="checkbox" data-setting="alwaysOnTop" ${state.settings.alwaysOnTop ? "checked" : ""}></label>
     <label class="setting-row"><span><strong>Lock position</strong><small>Disable accidental dragging</small></span><input type="checkbox" data-setting="locked" ${state.settings.locked ? "checked" : ""}></label>
     <label class="setting-row"><span><strong>Launch at login</strong><small>Start with your desktop</small></span><input type="checkbox" data-setting="launchAtLogin" ${state.settings.launchAtLogin ? "checked" : ""}></label>
     <label class="setting-row"><span><strong>Motion</strong><small>Respect system reduced motion</small></span><select data-setting="reducedMotion"><option value="system" ${motion === "system" ? "selected" : ""}>System</option><option value="on" ${motion === "on" ? "selected" : ""}>On</option><option value="off" ${motion === "off" ? "selected" : ""}>Off</option></select></label>
-  </div><div class="panel-footer"><span>Quota Critter 0.1.1</span><button class="text-button" data-action="toggle-settings">← Back</button></div>`;
+    <label class="setting-row setting-row--text"><span><strong>Codex CLI path</strong><small>Leave empty to auto-detect. Used when Codex is installed outside of PATH.</small></span><input type="text" data-setting="codexOverride" placeholder="e.g. C:\\Users\\you\\AppData\\Roaming\\npm\\codex.cmd" value="${safe(codexPath)}" spellcheck="false"></label>
+  </div><div class="panel-footer"><span>Quota Critter 0.1.3</span><button class="text-button" data-action="toggle-settings">← Back</button></div>`;
 }
 
 function render(): void {
@@ -156,7 +161,10 @@ function render(): void {
   updateLiveText();
 
   if (bridge.isTauri()) {
-    const nextHeight = state.expanded ? (state.settingsOpen ? 380 : 292) : 152;
+    const widget = root.querySelector<HTMLElement>(".floating-widget");
+    const measured = widget ? widget.offsetHeight : windowHeight;
+    const fallback = state.expanded ? (state.settingsOpen ? 380 : 292) : 152;
+    const nextHeight = state.expanded ? Math.max(measured, fallback) : 152;
     if (nextHeight !== windowHeight) {
       windowHeight = nextHeight;
       void bridge.setWidgetHeight(nextHeight);
@@ -199,7 +207,7 @@ async function refresh(): Promise<void> {
     } else if (code.includes("AUTH_UNSUPPORTED")) {
       state.error = { code: "AUTH_UNSUPPORTED", message: "Your account type isn't supported yet.", action: "retry" };
     } else if (code.includes("CODEX_NOT_FOUND") || code.includes("APP_SERVER_START_FAILED")) {
-      state.error = { code: "CODEX_NOT_FOUND", message: "Codex CLI not found. Install it and retry.", action: "retry" };
+      state.error = { code: "CODEX_NOT_FOUND", message: "Codex CLI not found. Install it, or set a custom path in Settings.", action: "install" };
     } else if (code.includes("RATE_LIMITS_EMPTY")) {
       state.error = { code: "RATE_LIMITS_EMPTY", message: "No quota data available.", action: "retry" };
     } else if (code.includes("REQUEST_TIMEOUT")) {
@@ -228,8 +236,8 @@ function wireEvents(): void {
       state.expanded = !state.expanded;
       if (!state.expanded) state.settingsOpen = false;
       render();
-    } else if (action === "toggle-settings") {
-      state.settingsOpen = !state.settingsOpen;
+    } else if (action === "toggle-settings" || action === "open-settings") {
+      state.settingsOpen = true;
       state.expanded = true;
       render();
     } else if (action === "retry") {
@@ -237,6 +245,11 @@ function wireEvents(): void {
     } else if (action === "login") {
       void bridge.login().catch(() => {
         state.error = { code: "LOGIN_FAILED", message: "Could not open the ChatGPT login flow. Try again from the tray menu.", action: "retry" };
+        render();
+      });
+    } else if (action === "install") {
+      void bridge.openUrl("https://github.com/openai/codex#installation").catch(() => {
+        state.error = { code: "OPEN_BROWSER_FAILED", message: "Could not open the install page.", action: "retry" };
         render();
       });
     }
@@ -247,7 +260,18 @@ function wireEvents(): void {
     if (!key) return;
     const next = { ...state.settings };
     if (input instanceof HTMLInputElement) {
-      (next[key] as boolean) = input.checked;
+      if (input.type === "checkbox") {
+        (next[key] as boolean) = input.checked;
+      } else if (input.type === "text") {
+        const value = input.value.trim();
+        if (key === "codexOverride") {
+          if (value.length === 0) {
+            delete next.codexOverride;
+          } else {
+            next.codexOverride = value;
+          }
+        }
+      }
     } else if (key === "reducedMotion") {
       next.reducedMotion = input.value as AppSettings["reducedMotion"];
     }
@@ -288,7 +312,7 @@ async function start(): Promise<void> {
     bridge.listenServer((server) => {
       state.server = server;
       if (server === "error" && !state.snapshot) {
-        state.error = { code: "CODEX_NOT_FOUND", message: "Codex CLI unavailable. Install or sign in to Codex, then retry.", action: "retry" };
+        state.error = { code: "CODEX_NOT_FOUND", message: "Codex CLI unavailable. Install it or set a custom path in Settings.", action: "install" };
       }
       render();
     }),

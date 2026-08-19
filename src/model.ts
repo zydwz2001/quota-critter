@@ -31,6 +31,7 @@ export type AppSettings = {
   refreshSecondsVisible: number;
   refreshSecondsHidden: number;
   locale: "system" | "en" | "zh-CN";
+  codexOverride?: string;
   windowPlacement?: { monitorId?: string; x: number; y: number };
 };
 
