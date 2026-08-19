@@ -48,7 +48,7 @@ export const bridge = {
   login: () => invoke<void>("start_login"),
   setSettings: (settings: AppSettings) => invoke<AppSettings>("set_settings", { settings }),
   setAlwaysOnTop: (value: boolean) => invoke<void>("set_always_on_top", { value }),
-  setWidgetHeight: (height: number) => invoke<void>("set_widget_height", { height }),
+  setWidgetSize: (width: number, height: number) => invoke<void>("set_widget_size", { width, height }),
   listenSnapshot: (handler: (snapshot: QuotaSnapshot) => void) => listen("quota://snapshot", handler),
   listenServer: (handler: (state: AppServerState) => void) => listen("app-server://state", handler),
   listenAuth: (handler: (state: string) => void) => listen("account://state", handler),

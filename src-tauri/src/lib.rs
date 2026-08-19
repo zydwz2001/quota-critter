@@ -315,11 +315,12 @@ fn open_external_url(url: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn set_widget_height(app: AppHandle, height: f64) -> Result<(), String> {
-    let height = height.clamp(100.0, 500.0);
+fn set_widget_size(app: AppHandle, width: f64, height: f64) -> Result<(), String> {
+    let width = width.clamp(260.0, 500.0);
+    let height = height.clamp(100.0, 600.0);
     app.get_webview_window("main")
         .ok_or_else(|| "MAIN_WINDOW_MISSING".to_string())?
-        .set_size(tauri::Size::Logical(tauri::LogicalSize::new(300.0, height)))
+        .set_size(tauri::Size::Logical(tauri::LogicalSize::new(width, height)))
         .map_err(|error| error.to_string())
 }
 
@@ -468,7 +469,7 @@ pub fn run() {
             get_settings,
             set_settings,
             set_always_on_top,
-            set_widget_height,
+            set_widget_size,
             open_external_url
         ])
         .run(tauri::generate_context!())

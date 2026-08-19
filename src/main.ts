@@ -44,6 +44,7 @@ const state: {
 };
 
 let windowHeight = 152;
+let windowWidth = 300;
 
 function safe(value: string | number | undefined | null): string {
   return String(value ?? "")
@@ -94,7 +95,7 @@ function errorMarkup(error: UserFacingError | null): string {
   } else if (error.action === "install") {
     action = `<button class="error-action" data-action="install">Install Codex</button><button class="error-action error-action--ghost" data-action="open-settings">Set path…</button>`;
   }
-  return `<div class="error-banner" role="alert"><span class="error-dot"></span><span>${safe(error.message)}</span>${action}</div>`;
+  return `<div class="error-banner" role="alert"><div class="error-banner__text"><span class="error-dot"></span><span>${safe(error.message)}</span></div><div class="error-banner__actions">${action}</div></div>`;
 }
 
 function amount(value: number | undefined): string {
@@ -134,7 +135,7 @@ function settingsMarkup(): string {
     <label class="setting-row"><span><strong>Launch at login</strong><small>Start with your desktop</small></span><input type="checkbox" data-setting="launchAtLogin" ${state.settings.launchAtLogin ? "checked" : ""}></label>
     <label class="setting-row"><span><strong>Motion</strong><small>Respect system reduced motion</small></span><select data-setting="reducedMotion"><option value="system" ${motion === "system" ? "selected" : ""}>System</option><option value="on" ${motion === "on" ? "selected" : ""}>On</option><option value="off" ${motion === "off" ? "selected" : ""}>Off</option></select></label>
     <label class="setting-row setting-row--text"><span><strong>Codex CLI path</strong><small>Leave empty to auto-detect. Used when Codex is installed outside of PATH.</small></span><input type="text" data-setting="codexOverride" placeholder="e.g. C:\\Users\\you\\AppData\\Roaming\\npm\\codex.cmd" value="${safe(codexPath)}" spellcheck="false"></label>
-  </div><div class="panel-footer"><span>Quota Critter 0.1.3</span><button class="text-button" data-action="toggle-settings">← Back</button></div>`;
+  </div><div class="panel-footer"><span>Quota Critter 0.1.4</span><button class="text-button" data-action="toggle-settings">← Back</button></div>`;
 }
 
 function render(): void {
@@ -165,9 +166,11 @@ function render(): void {
     const measured = widget ? widget.offsetHeight : windowHeight;
     const fallback = state.expanded ? (state.settingsOpen ? 380 : 292) : 152;
     const nextHeight = state.expanded ? Math.max(measured, fallback) : 152;
-    if (nextHeight !== windowHeight) {
+    const nextWidth = state.expanded ? 320 : 300;
+    if (nextHeight !== windowHeight || nextWidth !== windowWidth) {
       windowHeight = nextHeight;
-      void bridge.setWidgetHeight(nextHeight);
+      windowWidth = nextWidth;
+      void bridge.setWidgetSize(nextWidth, nextHeight);
     }
   }
 }
