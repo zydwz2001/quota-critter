@@ -43,7 +43,6 @@ const state: {
   error: null,
 };
 
-let refreshTimer: number | undefined;
 let windowHeight = 152;
 
 function safe(value: string | number | undefined | null): string {
@@ -195,19 +194,24 @@ async function refresh(): Promise<void> {
     state.error = null;
   } catch (error) {
     const code = String(error);
-    state.error = code.includes("AUTH_REQUIRED")
-      ? { code: "AUTH_REQUIRED", message: "Sign in with ChatGPT to see your Codex quota.", action: "login" }
-      : { code: "REQUEST_FAILED", message: "Offline — showing last known quota.", action: "retry" };
+    if (code.includes("AUTH_REQUIRED")) {
+      state.error = { code: "AUTH_REQUIRED", message: "Sign in with ChatGPT to see your Codex quota.", action: "login" };
+    } else if (code.includes("AUTH_UNSUPPORTED")) {
+      state.error = { code: "AUTH_UNSUPPORTED", message: "Your account type isn't supported yet.", action: "retry" };
+    } else if (code.includes("CODEX_NOT_FOUND") || code.includes("APP_SERVER_START_FAILED")) {
+      state.error = { code: "CODEX_NOT_FOUND", message: "Codex CLI not found. Install it and retry.", action: "retry" };
+    } else if (code.includes("RATE_LIMITS_EMPTY")) {
+      state.error = { code: "RATE_LIMITS_EMPTY", message: "No quota data available.", action: "retry" };
+    } else if (code.includes("REQUEST_TIMEOUT")) {
+      state.error = { code: "REQUEST_TIMEOUT", message: "Codex is taking too long. Try again.", action: "retry" };
+    } else {
+      state.error = { code: "REQUEST_FAILED", message: "Offline — showing last known quota.", action: "retry" };
+    }
     if (state.snapshot) state.snapshot = { ...state.snapshot, source: "cache", stale: true };
   } finally {
     state.syncing = false;
     render();
   }
-}
-
-function scheduleRefresh(): void {
-  if (refreshTimer) window.clearInterval(refreshTimer);
-  refreshTimer = window.setInterval(() => void refresh(), state.settings.refreshSecondsVisible * 1000);
 }
 
 function wireEvents(): void {
@@ -260,7 +264,6 @@ async function start(): Promise<void> {
     state.auth = "chatgpt";
     state.snapshot = demoSnapshot;
     render();
-    scheduleRefresh();
     return;
   }
 
@@ -299,7 +302,6 @@ async function start(): Promise<void> {
       render();
     }),
   ]);
-  scheduleRefresh();
   await refresh();
 }
 
