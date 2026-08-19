@@ -447,7 +447,7 @@ pub fn run() {
                 }
             }
 
-            setup_tray(app, core)?;
+            setup_tray(app, Arc::clone(&core))?;
             core.bootstrap();
             Ok(())
         })
