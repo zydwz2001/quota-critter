@@ -434,7 +434,7 @@ pub fn run() {
                 Core::new(app.handle().clone(), settings_path).map_err(std::io::Error::other)?;
             app.manage(AppState(Arc::clone(&core)));
 
-            if let Some(window) = app.get_window("main") {
+            if let Some(window) = app.get_webview_window("main") {
                 if let Ok(settings) = core.settings.get() {
                     if let Some(placement) = settings.window_placement {
                         let _ = window.set_position(tauri::Position::Logical(
