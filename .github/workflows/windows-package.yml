@@ -32,6 +32,10 @@ jobs:
         run: npm run typecheck
 
       - name: Build NSIS installer
+        # RUSTFLAGS=-C save-temps 防御某些 MSVC + rustc 版本下编译 proc-macro 时
+        # 链接完成后不退出（WaitForSingleObject 竞态）。代价是 target 残留 .o/.bc 中间文件。
+        env:
+          RUSTFLAGS: "-C save-temps"
         run: npm run tauri build -- --bundles nsis --ci
 
       - name: Upload Windows installer

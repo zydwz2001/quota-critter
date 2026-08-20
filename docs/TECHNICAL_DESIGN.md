@@ -8,7 +8,7 @@
 
 ## 1. 技术结论
 
-采用 **Tauri 2 + Rust 后端 + Vanilla TypeScript/CSS 前端 + 固定版本 Codex App Server sidecar**。
+采用 **Tauri 2 + Rust 后端 + Vanilla TypeScript/CSS 前端 + 用户本机 Codex App Server**。
 
 - App Server 官方账户接口读取额度，不抓网页、不解析私有接口；
 - stdio JSONL 通信，不开放 TCP/WebSocket 端口；
@@ -16,7 +16,7 @@
 - 前端只接收清洗后的领域模型；
 - v0.1 不启动线程或模型调用。
 
-> 稳定性边界：官方文档当前把 `app-server` 命令标记为实验性、非受支持的生产接口。Quota Critter 属于开源实验性工具，Release 必须固定 sidecar 与 Schema，Codex 升级必须先通过 Fixture 与双平台冒烟测试。
+> 稳定性边界：官方文档提供 App Server 嵌入协议，但 Quota Critter 不固定用户本机的 Codex 版本。实现必须兼容已知 Schema，并在新版客户端/扩展发布后执行 Fixture 与双平台冒烟测试。
 
 官方参考：[Codex App Server](https://learn.chatgpt.com/docs/app-server)、[Authentication](https://learn.chatgpt.com/docs/auth)、[Tauri 2](https://v2.tauri.app/start/)、[System Tray](https://v2.tauri.app/learn/system-tray/)、[Updater](https://v2.tauri.app/plugin/updater/)。
 
@@ -24,11 +24,11 @@
 
 Tauri 使用系统 WebView，适合轻量托盘应用；Rust 适合子进程、stdio、状态机和窗口。相比 Electron，不捆绑完整 Chromium；相比双原生 UI，维护成本更低。
 
-## 3. Sidecar 策略
+## 3. 本机 Runtime 发现策略
 
-开发查找顺序：`QUOTA_CRITTER_CODEX_PATH` → `PATH` 中的 `codex` → 开发配置绝对路径 → 安装指导。
+查找顺序：设置中的绝对路径 → `QUOTA_CRITTER_CODEX_PATH` → `PATH` → VS Code/Cursor/Windsurf 扩展 → Codex/ChatGPT 桌面安装目录 → 常见全局安装目录 → 系统 `where/which` → 安装指导。
 
-Beta/Release 使用 Tauri `externalBin` 固定 Codex 二进制，每个平台/架构独立构建，保留 Apache-2.0 LICENSE/NOTICE，记录 Quota Critter 版本、Codex 版本和 schema hash。
+安装包不携带 Codex 二进制，也不读取或复制 `auth.json` 中的 token。Rust 只启动找到的本机 `codex app-server`，由 Codex 管理 ChatGPT 浏览器登录、凭证保存和刷新。
 
 ## 4. 架构
 
@@ -62,7 +62,6 @@ quota-critter/
 │  │  ├─ app_server.rs
 │  │  ├─ quota.rs
 │  │  └─ settings.rs
-│  ├─ binaries/                 # 发布用 sidecar
 │  ├─ capabilities/
 │  └─ tauri.conf.json
 ├─ schemas/
@@ -157,7 +156,7 @@ codex app-server generate-ts --out ./schemas/typescript
 codex app-server generate-json-schema --out ./schemas/json
 ```
 
-Schema 与 sidecar 一起提交，CI 检查生成结果，升级前先跑协议 Fixture。
+Schema Fixture 随仓库提交，CI 检查解析兼容性；已知 Codex 版本变化后先跑协议 Fixture。
 
 ## 7. 刷新与状态机
 
@@ -169,7 +168,7 @@ Schema 与 sidecar 一起提交，CI 检查生成结果，升级前先跑协议 
 
 失败退避：`5s -> 15s -> 30s -> 60s -> 5m`，加入 0–20% jitter。
 
-sidecar 状态：`Stopped -> Starting -> Handshaking -> Ready -> RestartBackoff -> FailedPermanent`。意外退出最多重启 3 次，稳定运行 10 分钟后重置计数，主动退出不重启。
+App Server 子进程状态：`Stopped -> Starting -> Handshaking -> Ready -> RestartBackoff -> FailedPermanent`。连接失败按刷新策略退避；退出 Quota Critter 时主动终止自己启动的子进程。
 
 ## 8. 缓存与设置
 
@@ -210,17 +209,17 @@ Rust 只向前端发送：`quota://snapshot`、`quota://sync-state`、`account:/
 
 ## 11. 测试
 
-Rust 单元测试覆盖百分比边界、单/多桶、primary/secondary 缺失、重置判断、退避、脱敏和设置迁移。协议 Fixture 覆盖 ChatGPT 登录、未登录、API Key-only、空额度、通知、错误和 sidecar 退出。前端覆盖所有 Lumo 状态、收起、离线、DPI、reduced motion 和键盘访问。
+Rust 单元测试覆盖百分比边界、单/多桶、primary/secondary 缺失、重置判断、路径发现、命令包装、退避、脱敏和设置迁移。协议 Fixture 覆盖 ChatGPT 登录、未登录、API Key-only、空额度、通知、错误和 App Server 退出。前端覆盖所有 Lumo 状态、收起、离线、DPI、reduced motion 和键盘访问。
 
 跨平台手测：macOS Apple Silicon、Windows 10/11 x64、单/多显示器、睡眠唤醒、网络恢复、Codex 桌面端与 VS Code 同时运行、开机启动、卸载和安装警告。
 
 ## 12. 发布与风险
 
-GitHub Actions 构建 macOS/Windows，sidecar 校验 SHA-256，上传安装包、校验和、更新清单及第三方许可。正式公开下载应配置 macOS Developer ID/notarization 与 Windows 代码签名，更新器使用签名包。
+GitHub Actions 构建 macOS/Windows，上传安装包、校验和与更新清单。正式公开下载应配置 macOS Developer ID/notarization 与 Windows 代码签名，更新器使用签名包。
 
 | 风险 | 应对 |
 | --- | --- |
-| App Server 实验性且协议可能变化 | 固定 sidecar、Schema、Fixture；上游变化时暂停升级 |
+| 用户本机 App Server 版本和协议可能变化 | 兼容已知 Schema、Fixture，并在错误中引导升级客户端/扩展 |
 | 认证模式不返回额度 | v0.1 明确只支持 ChatGPT Codex 额度 |
 | 登录缓存无法复用 | 使用官方 App Server 登录，不直接读凭据 |
 | Windows 透明窗口差异 | M1 先双平台 Spike |
@@ -233,4 +232,4 @@ GitHub Actions 构建 macOS/Windows，sidecar 校验 SHA-256，上传安装包�
 - M1（1 天）：Tauri 窗口、托盘、拖动、位置保存和假数据 UI；
 - M2（1 天）：认证、真实额度、缓存、离线和重试；
 - M3（1–2 天）：正式 Sprite、状态动画、详情、设置和测试；
-- M4（1–2 天，不含证书等待）：sidecar、CI、安装包、README、签名和更新器。
+- M4（1–2 天，不含证书等待）：本机 runtime 自动发现、CI、安装包、README、签名和更新器。

@@ -12,9 +12,9 @@
 
 Quota Critter 是一款轻量、常驻系统托盘的 Codex 额度提示工具。它以原创像素角色 Lumo 表达额度状态，展示当前额度窗口的剩余百分比、重置时间、多个额度窗口和数据新鲜度。
 
-应用独立于 Codex 桌面端和 VS Code 运行。用户在任一 Codex 界面产生的账户级用量，都由 Quota Critter 通过 Codex App Server 重新查询并展示。
+应用 UI 独立于 Codex 桌面端和 VS Code 运行，但复用用户已经安装并登录的 Codex 客户端、CLI 或 IDE 扩展中的本机运行组件。用户在任一 Codex 界面产生的账户级用量，都由 Quota Critter 通过 Codex App Server 重新查询并展示。
 
-> 产品风险声明：Codex 官方文档当前仍将 `app-server` 命令标记为实验性集成面。Quota Critter v0.1 应定位为开源实验性工具，固定并随包发布经过验证的 Codex 版本，不宣称得到 OpenAI 官方支持。
+> 产品风险声明：Codex 官方文档提供 App Server 嵌入协议，但 Quota Critter 不内置 Codex runtime，因此兼容性取决于用户已安装客户端或扩展的版本；本项目不宣称得到 OpenAI 官方支持。
 
 ## 2. 背景与目标
 
@@ -96,11 +96,11 @@ Codex 用户经常同时使用桌面端和 VS Code 扩展，但额度信息被�
 - 托盘单击显示/隐藏；
 - 菜单支持显示/隐藏、锁定位置、置顶、开机启动、刷新、设置、退出；
 - 保存位置、显示器、展开状态、动画设置和刷新间隔；
-- 退出时终止由应用启动的 sidecar。
+- 退出时终止由应用启动的本机 `codex app-server` 子进程。
 
 #### FR-006 异常状态
 
-支持 Codex runtime 未找到、sidecar 启动失败、未登录、不支持认证模式、网络离线、超时、协议不兼容、额度为空。每种错误都要给出下一步动作，不展示堆栈。
+支持 Codex runtime 未找到、本机 App Server 启动失败、未登录、不支持认证模式、网络离线、超时、协议不兼容、额度为空。每种错误都要给出下一步动作，不展示堆栈。
 
 #### FR-007 无障碍
 
@@ -176,7 +176,7 @@ remainingPercent = clamp(round(100 - usedPercent), 0, 100)
 
 - 显示缓存 UI 冷启动小于 1.5 秒；
 - 正常网络下首次真实额度小于 4 秒；
-- 空闲主进程内存目标小于 60 MB，不含 Codex sidecar；
+- 空闲主进程内存目标小于 60 MB，不含临时启动的本机 Codex App Server；
 - 空闲 CPU 平均低于 1%；
 - Sprite 与静态资源目标小于 1 MB；
 - 适配 macOS Apple Silicon 与 Windows 10/11 x64；
@@ -199,12 +199,12 @@ remainingPercent = clamp(round(100 - usedPercent), 0, 100)
 4. VS Code 工作时挂件仍能置顶、拖动、刷新。
 5. 断网保留最后数据并明确标记过期。
 6. 恢复网络后自动重连。
-7. 退出后没有遗留 sidecar。
+7. 退出后没有遗留由 Quota Critter 启动的 App Server 子进程。
 8. reduced motion 下没有循环动画。
 9. 不上传或展示 Codex 会话内容。
 
 ## 9. 发布计划
 
 - Alpha：系统 Codex runtime，验证协议与登录；
-- Beta：固定版本 sidecar、macOS Apple Silicon、Windows x64、GitHub Release；
+- Beta：完善客户端/CLI/IDE 扩展自动发现、macOS Apple Silicon、Windows x64、GitHub Release；
 - v0.1：签名/公证、自动更新、兼容测试、README GIF 和第三方许可。

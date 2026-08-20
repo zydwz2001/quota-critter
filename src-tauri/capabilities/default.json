@@ -9,7 +9,6 @@
     "core:window:allow-set-always-on-top",
     "core:window:allow-set-size",
     "core:window:allow-set-position",
-    "core:window:allow-outer-position",
-    "opener:default"
+    "core:window:allow-outer-position"
   ]
 }

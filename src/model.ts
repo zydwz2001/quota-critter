@@ -26,6 +26,7 @@ export type AppSettings = {
   alwaysOnTop: boolean;
   locked: boolean;
   launchAtLogin: boolean;
+  quotaReminder: boolean;
   reducedMotion: "system" | "on" | "off";
   widgetMode: "default" | "collapsed";
   refreshSecondsVisible: number;
@@ -49,6 +50,7 @@ export const defaultSettings: AppSettings = {
   alwaysOnTop: true,
   locked: false,
   launchAtLogin: false,
+  quotaReminder: true,
   reducedMotion: "system",
   widgetMode: "default",
   refreshSecondsVisible: 60,
@@ -115,8 +117,15 @@ export function formatCountdown(timestamp: number, now = Date.now()): string {
   return `${minutes}m`;
 }
 
-export function formatReset(timestamp: number, locale = "en-US"): string {
-  return new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" }).format(timestamp);
+export function formatReset(timestamp: number, locale: "en" | "zh-CN" = "en"): string {
+  return new Intl.DateTimeFormat(locale, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(timestamp);
 }
 
 export function formatSynced(timestamp: number, now = Date.now()): string {
