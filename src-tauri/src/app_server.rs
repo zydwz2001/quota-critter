@@ -93,7 +93,7 @@ impl RpcClient {
     }
 
     pub fn initialize(&self) -> Result<(), String> {
-        self.request("initialize", json!({ "clientInfo": { "name": "quota_critter", "title": "Quota Critter", "version": "0.1.4" } }))?;
+        self.request("initialize", json!({ "clientInfo": { "name": "quota_critter", "title": "Quota Critter", "version": "0.1.5" } }))?;
         self.notify("initialized", json!({}))
     }
 
