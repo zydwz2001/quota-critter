@@ -52,6 +52,7 @@ export const bridge = {
   listenSnapshot: (handler: (snapshot: QuotaSnapshot) => void) => listen("quota://snapshot", handler),
   listenServer: (handler: (state: AppServerState) => void) => listen("app-server://state", handler),
   listenAuth: (handler: (state: string) => void) => listen("account://state", handler),
+  listenRateLimitsUpdated: (handler: () => void) => listen("account://rate-limits-updated", handler),
   listenOpenSettings: (handler: () => void) => listen("ui://open-settings", handler),
   startDragging: async () => {
     if (!isTauriRuntime()) return;

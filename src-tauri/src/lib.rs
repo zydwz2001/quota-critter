@@ -26,12 +26,14 @@ use tauri_plugin_autostart::ManagerExt;
 pub struct Core {
     app: AppHandle,
     client: Mutex<Option<Arc<RpcClient>>>,
+    connect_lock: Mutex<()>,
     snapshot: RwLock<Option<QuotaSnapshot>>,
     settings: SettingsStore,
     cache_path: PathBuf,
     refresh_lock: Mutex<()>,
     visible: AtomicBool,
     last_refresh: Mutex<u64>,
+    last_attempt: Mutex<u64>,
     consecutive_errors: AtomicU32,
     last_position: Mutex<Option<settings::WindowPlacement>>,
 }
@@ -47,12 +49,14 @@ impl Core {
         Ok(Arc::new(Self {
             app,
             client: Mutex::new(None),
+            connect_lock: Mutex::new(()),
             snapshot: RwLock::new(cached_snapshot),
             settings: SettingsStore::load(settings_path)?,
             cache_path,
             refresh_lock: Mutex::new(()),
             visible: AtomicBool::new(true),
             last_refresh: Mutex::new(last_refresh),
+            last_attempt: Mutex::new(0),
             consecutive_errors: AtomicU32::new(0),
             last_position: Mutex::new(None),
         }))
@@ -69,42 +73,76 @@ impl Core {
     fn bootstrap(self: &Arc<Self>) {
         let core = Arc::clone(self);
         thread::spawn(move || {
-            core.emit_server(AppServerState::Starting);
-            let override_path = core
-                .settings
-                .get()
-                .ok()
-                .and_then(|s| s.codex_override);
-            match RpcClient::spawn(core.app.clone(), override_path.map(PathBuf::from)) {
-                Ok(client) => {
-                    core.emit_server(AppServerState::Handshaking);
-                    if let Err(error) = client.initialize() {
-                        core.emit_server(AppServerState::Error);
-                        eprintln!("app-server initialize failed: {error}");
-                        return;
-                    }
-                    let client = Arc::new(client);
-                    if let Ok(mut slot) = core.client.lock() {
-                        *slot = Some(Arc::clone(&client));
-                    }
-                    core.emit_server(AppServerState::Ready);
-                    let _ = core.refresh_quota_internal();
-                    core.run_scheduler();
-                }
-                Err(error) => {
-                    core.emit_server(AppServerState::Error);
-                    eprintln!("app-server start failed: {error}");
-                }
+            if let Err(error) = core.refresh_quota_internal() {
+                core.emit_server(AppServerState::Error);
+                eprintln!("initial quota refresh failed: {error}");
             }
+            // Keep retrying when a client/extension is installed, updated, or
+            // signed in after Quota Critter has already started.
+            core.run_scheduler();
         });
     }
 
     fn client(&self) -> Result<Arc<RpcClient>, String> {
-        self.client
+        let existing = {
+            let mut slot = self
+                .client
+                .lock()
+                .map_err(|_| "APP_SERVER_LOCK_FAILED".to_string())?;
+            match slot.as_ref() {
+                Some(client) if client.is_running() => Some(Arc::clone(client)),
+                Some(_) => {
+                    *slot = None;
+                    None
+                }
+                None => None,
+            }
+        };
+        match existing {
+            Some(client) => Ok(client),
+            None => self.connect_client(),
+        }
+    }
+
+    fn connect_client(&self) -> Result<Arc<RpcClient>, String> {
+        let _guard = self
+            .connect_lock
+            .lock()
+            .map_err(|_| "APP_SERVER_CONNECT_LOCK_FAILED".to_string())?;
+        if let Some(client) = self
+            .client
             .lock()
             .map_err(|_| "APP_SERVER_LOCK_FAILED".to_string())?
-            .clone()
-            .ok_or_else(|| "APP_SERVER_START_FAILED".to_string())
+            .as_ref()
+            .filter(|client| client.is_running())
+            .cloned()
+        {
+            return Ok(client);
+        }
+
+        self.emit_server(AppServerState::Starting);
+        let override_path = self
+            .settings
+            .get()
+            .ok()
+            .and_then(|settings| settings.codex_override)
+            .map(PathBuf::from);
+        let client = RpcClient::spawn(self.app.clone(), override_path)?;
+        self.emit_server(AppServerState::Handshaking);
+        client.initialize()?;
+        let client = Arc::new(client);
+        *self
+            .client
+            .lock()
+            .map_err(|_| "APP_SERVER_LOCK_FAILED".to_string())? = Some(Arc::clone(&client));
+        self.emit_server(AppServerState::Ready);
+        Ok(client)
+    }
+
+    fn clear_client(&self) {
+        if let Ok(mut slot) = self.client.lock() {
+            *slot = None;
+        }
     }
 
     fn refresh_quota_internal(&self) -> Result<QuotaSnapshot, String> {
@@ -112,8 +150,31 @@ impl Core {
             .refresh_lock
             .lock()
             .map_err(|_| "REFRESH_LOCK_FAILED".to_string())?;
-        let client = self.client()?;
-        let snapshot = fetch_quota(&client)?;
+        if let Ok(mut slot) = self.last_attempt.lock() {
+            *slot = now_millis();
+        }
+        let mut retried_connection = false;
+        let result = loop {
+            let client = match self.client() {
+                Ok(client) => client,
+                Err(error) => break Err(error),
+            };
+            match fetch_quota(&client) {
+                Ok(snapshot) => break Ok(snapshot),
+                Err(error) if !retried_connection && is_connection_error(&error) => {
+                    retried_connection = true;
+                    self.clear_client();
+                }
+                Err(error) => break Err(error),
+            }
+        };
+        let snapshot = match result {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                self.record_refresh_error(&error);
+                return Err(error);
+            }
+        };
         if let Ok(mut slot) = self.snapshot.write() {
             *slot = Some(snapshot.clone());
         }
@@ -124,7 +185,27 @@ impl Core {
             *slot = snapshot.fetched_at;
         }
         self.consecutive_errors.store(0, Ordering::Relaxed);
+        self.emit_server(AppServerState::Ready);
         Ok(snapshot)
+    }
+
+    fn record_refresh_error(&self, error: &str) {
+        self.consecutive_errors.fetch_add(1, Ordering::Relaxed);
+        if error.contains("AUTH_REQUIRED") {
+            self.emit_auth("signedOut");
+        } else if error.contains("AUTH_UNSUPPORTED") {
+            self.emit_auth("unsupported");
+        }
+
+        let stale_snapshot = self.snapshot.write().ok().and_then(|mut slot| {
+            let snapshot = slot.as_mut()?;
+            snapshot.source = "cache".into();
+            snapshot.stale = true;
+            Some(snapshot.clone())
+        });
+        if let Some(snapshot) = stale_snapshot {
+            let _ = self.app.emit("quota://snapshot", snapshot);
+        }
     }
 
     fn start_login(&self) -> Result<(), String> {
@@ -134,7 +215,7 @@ impl Core {
             json!({
                 "type": "chatgpt",
                 "useHostedLoginSuccessPage": true,
-                "appBrand": "codex"
+                "appBrand": "chatgpt"
             }),
         )?;
         let url = result
@@ -161,22 +242,22 @@ impl Core {
             };
 
             let errors = self.consecutive_errors.load(Ordering::Relaxed);
-            let backoff_multiplier = 1u64 << errors.min(4);
-            let interval_secs = base_interval
-                .saturating_mul(backoff_multiplier)
-                .min(300);
+            let backoff_multiplier = 1u64 << errors.saturating_sub(1).min(4);
+            let interval_secs = base_interval.saturating_mul(backoff_multiplier).min(300);
 
             let last = *self
-                .last_refresh
+                .last_attempt
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
             let elapsed_secs = now_millis().saturating_sub(last) / 1000;
 
             if elapsed_secs >= interval_secs {
-                if self.refresh_quota_internal().is_err() {
-                    self.consecutive_errors
-                        .fetch_add(1, Ordering::Relaxed);
+                if let Err(error) = self.refresh_quota_internal() {
+                    if is_connection_error(&error) {
+                        self.clear_client();
+                    }
                     self.emit_server(AppServerState::Backoff);
+                    eprintln!("scheduled quota refresh failed: {error}");
                 }
             }
         }
@@ -199,13 +280,14 @@ impl Core {
             .ok()
             .and_then(|slot| slot.clone())
             .or_else(|| {
-                window.outer_position().ok().map(|position| {
-                    settings::WindowPlacement {
+                window
+                    .outer_position()
+                    .ok()
+                    .map(|position| settings::WindowPlacement {
                         monitor_id: None,
                         x: position.x,
                         y: position.y,
-                    }
-                })
+                    })
             });
 
         if let Some(placement) = placement {
@@ -217,9 +299,7 @@ impl Core {
         }
     }
 
-    fn should_refresh_on_show(&self,
-        settings: &AppSettings,
-    ) -> bool {
+    fn should_refresh_on_show(&self, settings: &AppSettings) -> bool {
         let last = *self
             .last_refresh
             .lock()
@@ -311,6 +391,13 @@ fn set_always_on_top(app: AppHandle, value: bool) -> Result<(), String> {
 
 #[tauri::command]
 fn open_external_url(url: String) -> Result<(), String> {
+    // 安全校验：只允许 https/http URL，防止命令注入到 `cmd /C start` / `open` / `xdg-open`
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return Err("UNSAFE_URL".to_string());
+    }
+    if url.contains('\n') || url.contains('\r') || url.contains('"') {
+        return Err("UNSAFE_URL".to_string());
+    }
     open_url(&url)
 }
 
@@ -318,10 +405,51 @@ fn open_external_url(url: String) -> Result<(), String> {
 fn set_widget_size(app: AppHandle, width: f64, height: f64) -> Result<(), String> {
     let width = width.clamp(260.0, 500.0);
     let height = height.clamp(100.0, 600.0);
-    app.get_webview_window("main")
-        .ok_or_else(|| "MAIN_WINDOW_MISSING".to_string())?
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "MAIN_WINDOW_MISSING".to_string())?;
+    window
         .set_size(tauri::Size::Logical(tauri::LogicalSize::new(width, height)))
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+
+    // Expanding a widget parked near the bottom/right edge used to put part of
+    // the panel outside the visible desktop. Keep the resized window inside
+    // the current monitor's work area (which excludes the taskbar/dock).
+    if let (Ok(position), Ok(size), Ok(Some(monitor))) = (
+        window.outer_position(),
+        window.outer_size(),
+        window.current_monitor(),
+    ) {
+        let work_area = monitor.work_area();
+        let min_x = work_area.position.x;
+        let min_y = work_area.position.y;
+        let max_x = min_x
+            .saturating_add(work_area.size.width as i32)
+            .saturating_sub(size.width as i32);
+        let max_y = min_y
+            .saturating_add(work_area.size.height as i32)
+            .saturating_sub(size.height as i32);
+        let x = position.x.clamp(min_x, max_x.max(min_x));
+        let y = position.y.clamp(min_y, max_y.max(min_y));
+        if x != position.x || y != position.y {
+            window
+                .set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(
+                    x, y,
+                )))
+                .map_err(|error| error.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+fn is_connection_error(error: &str) -> bool {
+    error.contains("APP_SERVER_WRITE_FAILED")
+        || error.contains("APP_SERVER_FLUSH_FAILED")
+        || error.contains("APP_SERVER_STDIN")
+        || error.contains("APP_SERVER_MESSAGES")
+        || error.contains("APP_SERVER_RPC")
+        || error.contains("REQUEST_TIMEOUT")
+        || error.contains("RATE_LIMITS_EMPTY")
 }
 
 fn setup_tray(app: &tauri::App, core: Arc<Core>) -> tauri::Result<()> {
@@ -416,7 +544,6 @@ fn open_url(url: &str) -> Result<(), String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
@@ -449,10 +576,7 @@ pub fn run() {
                 if let Ok(settings) = core.settings.get() {
                     if let Some(placement) = settings.window_placement {
                         let _ = window.set_position(tauri::Position::Logical(
-                            tauri::LogicalPosition::new(
-                                placement.x as f64,
-                                placement.y as f64,
-                            ),
+                            tauri::LogicalPosition::new(placement.x as f64, placement.y as f64),
                         ));
                     }
                 }

@@ -14,6 +14,15 @@ src-tauri/target
 .artifacts
 *.local
 
+# Tauri 打包产物
+*.exe
+setup*.exe
+*_x64-setup.exe
+
+# rustc 临时工作目录（强杀卡住的 rustc 会留下）
+/rmeta*/
+/rustc*/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
