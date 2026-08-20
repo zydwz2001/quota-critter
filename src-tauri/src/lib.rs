@@ -462,9 +462,16 @@ fn setup_tray(app: &tauri::App, core: Arc<Core>) -> tauri::Result<()> {
     let menu_core = Arc::clone(&core);
     let click_core = Arc::clone(&core);
 
-    TrayIconBuilder::new()
+    let tray_builder = TrayIconBuilder::new()
         .menu(&menu)
-        .tooltip("Quota Critter")
+        .tooltip("Quota Critter");
+    let tray_builder = if let Some(icon) = app.default_window_icon() {
+        tray_builder.icon(icon.clone())
+    } else {
+        tray_builder
+    };
+
+    tray_builder
         .on_menu_event(move |app, event| {
             if let Some(window) = app.get_webview_window("main") {
                 match event.id.as_ref() {
